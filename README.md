@@ -14,6 +14,8 @@
 composer require wuwx/sm3
 ```
 
+需要 PHP 5.6 及以上，无扩展依赖。
+
 ## 使用
 
 ```php

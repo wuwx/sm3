@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Wuwx\Sm3;
 
 /**
@@ -9,30 +7,41 @@ namespace Wuwx\Sm3;
  */
 final class Sm3
 {
+    private static $t;
+
     /**
      * 32 位字一律拆成 hi/lo 两个 16 位半字运算，
      * 换成 32 位整数加 0xFFFFFFFF 掩码在 32 位 PHP 上会溢出成 float。
+     *
+     * @return int[]
      */
-    private const IV = [
-        0x7380, 0x166f, 0x4914, 0xb2b9, 0x1724, 0x42d7, 0xda8a, 0x0600,
-        0xa96f, 0x30bc, 0x1631, 0x38aa, 0xe38d, 0xee4d, 0xb0fb, 0x0e4e,
-    ];
-
-    private static ?array $t = null;
-
-    public static function hash(string $data): string
+    private static function iv()
     {
-        [$th, $tl] = self::tTable();
+        return [
+            0x7380, 0x166f, 0x4914, 0xb2b9, 0x1724, 0x42d7, 0xda8a, 0x0600,
+            0xa96f, 0x30bc, 0x1631, 0x38aa, 0xe38d, 0xee4d, 0xb0fb, 0x0e4e,
+        ];
+    }
+
+    /**
+     * @param string $data
+     * @return string 64 位小写十六进制摘要
+     */
+    public static function hash($data)
+    {
+        list($th, $tl) = self::tTable();
 
         $bitLength = strlen($data) * 8;
         $data .= "\x80";
         $data .= str_repeat("\0", (56 - strlen($data) % 64 + 64) % 64);
-        $data .= pack('J', $bitLength);
+        // 32 位 PHP 5 上移位量会被截到 5 位，>> 32 等价于 >> 0，只能按字长分支
+        $data .= pack('N2', PHP_INT_SIZE >= 8 ? $bitLength >> 32 : 0, $bitLength);
 
-        [
+        $iv = self::iv();
+        list(
             $v0h, $v0l, $v1h, $v1l, $v2h, $v2l, $v3h, $v3l,
-            $v4h, $v4l, $v5h, $v5l, $v6h, $v6l, $v7h, $v7l,
-        ] = self::IV;
+            $v4h, $v4l, $v5h, $v5l, $v6h, $v6l, $v7h, $v7l
+        ) = $iv;
 
         $total = strlen($data);
 
@@ -147,7 +156,7 @@ final class Sm3
         );
     }
 
-    private static function tTable(): array
+    private static function tTable()
     {
         if (self::$t !== null) {
             return self::$t;
@@ -156,7 +165,7 @@ final class Sm3
         $th = $tl = [];
         for ($j = 0; $j < 64; $j++) {
             $n = $j % 32;
-            [$h, $l] = $j < 16 ? [0x79cc, 0x4519] : [0x7a87, 0x9d8a];
+            list($h, $l) = $j < 16 ? [0x79cc, 0x4519] : [0x7a87, 0x9d8a];
 
             if ($n === 0) {
                 $th[$j] = $h;
